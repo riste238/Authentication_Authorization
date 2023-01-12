@@ -1,25 +1,60 @@
-const userDb = {
+const usersDB = {
     users: require('../model/users.json'),
     setUser: function (data) { this.users = data; }
 }
 
+const bcrypt = require('bcrypt');
 
-const handleAuth = async (req, res) => {
-    const { name, password } = req.body;
-// 
-// 
-    if (userDb.users.find(user => user.password === password)) {
-        // user is correct and he could be logged...
-        console.log("User is logged");
-        res.status(200).json({ "success": `User  ${name} is logged successfully!` })
+const jwt = require('jsonwebtoken');
+
+const fsPromises = require('fs').promises;
+const path = require('path');
+
+const handleLogin = async (req, res) => {
+    // const {user, psw} = req.body;
+    const name = req.body.name;
+    const password = req.body.password;
+
+    if (!name || !password) { res.status(400).json({ message: `name and password are required!` }) }
+    const foundUser = usersDB.users.find(person => person.name === name);
+
+    if (!foundUser) { return res.sendStatus(401); }// Unauthorized! 
+
+    const match = await bcrypt.compare(password, foundUser.password);
+    if (match) {
+        // create JWTs
+        const accessToken = jwt.sign(
+
+            {
+                "UserInfo":
+                {
+                    "name": foundUser.name
+                }
+
+            },
+           `${ process.env.ACCESS_TOKEN_SECRET}`,
+            { expiresIn: '30s' }
+        );
+
+        const refreshToken = jwt.sign(
+
+            { "name": foundUser.name },
+          ` ${process.env.REFRESH_TOKEN_SECRET}`,
+            { expiresIn: '1d' }
+        );
+        const otherUsers = usersDB.users.filter(person => person.name !== foundUser.name);
+        const currentUser = { ...foundUser, refreshToken };
+        usersDB.setUser([...otherUsers, currentUser]);
+
+        await fsPromises.writeFile(path.join(__dirname, '..', 'model', 'users.json'),
+            JSON.stringify(usersDB.users)
+        )
+        res.cookie('jwt', refreshToken, { httpOnly: true, sameSite: 'None', secure: true, maxAge: 24 * 60 * 60 * 1000 });
+        res.json({ accessToken });
     }
     else {
-        console.log("Uncorrect password");
-        res.status(500).json({ msg: "Invalid password" });
+        res.sendStatus(401);
     }
 
-
-
-};
-
-module.exports = { handleAuth };
+}
+module.exports = { handleLogin };
