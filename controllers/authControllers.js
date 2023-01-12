@@ -6,7 +6,8 @@ const userDb = {
 
 const handleAuth = async (req, res) => {
     const { name, password } = req.body;
-
+// 
+// 
     if (userDb.users.find(user => user.password === password)) {
         // user is correct and he could be logged...
         console.log("User is logged");
